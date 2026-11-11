@@ -12,7 +12,7 @@ pub struct FollowedUserIdsQueryHydrator {
 #[async_trait]
 impl QueryHydrator<ScoredPostsQuery> for FollowedUserIdsQueryHydrator {
     fn enable(&self, query: &ScoredPostsQuery) -> bool {
-        query.user_features.followed_user_ids.is_empty()
+        query.discovery_slate.is_some() || query.user_features.followed_user_ids.is_empty()
     }
 
     async fn hydrate(&self, query: &ScoredPostsQuery) -> Result<ScoredPostsQuery, String> {
@@ -33,5 +33,11 @@ impl QueryHydrator<ScoredPostsQuery> for FollowedUserIdsQueryHydrator {
 
     fn update(&self, query: &mut ScoredPostsQuery, hydrated: ScoredPostsQuery) {
         query.user_features.followed_user_ids = hydrated.user_features.followed_user_ids;
+        if let Some(slate) = &query.discovery_slate {
+            slate.graph_checks.fetch_or(
+                crate::util::guaranteed_discovery::FOLLOWS_CHECKED,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
     }
 }

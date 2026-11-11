@@ -3,11 +3,14 @@ use crate::models::query::ScoredPostsQuery;
 use crate::params;
 use crate::server::QueryBuilder;
 use crate::util::feed_log;
+use crate::util::guaranteed_discovery::{DiscoverySlate, SLOTS_PER_DISCOVERY};
+use std::collections::HashSet;
+use std::sync::Arc;
 use crate::util::under_the_hood;
 use crate::util::urt;
 use tonic::Status;
 use xai_candidate_pipeline::candidate_pipeline::CandidatePipeline;
-use xai_home_mixer_proto::{FeedItem, PipelineTrace};
+use xai_home_mixer_proto::{FeedItem, PipelineTrace, feed_item};
 
 pub(crate) struct ForYouFeedOutput {
     pub items: Vec<FeedItem>,
@@ -29,7 +32,7 @@ impl ForYouFeedServer {
 
     pub(crate) async fn get_for_you_feed(
         &self,
-        query: ScoredPostsQuery,
+        mut query: ScoredPostsQuery,
     ) -> Result<ForYouFeedOutput, Status> {
         if params::TEST_USER_IDS.contains(&query.user_id) {
             return Ok(ForYouFeedOutput {
@@ -38,8 +41,52 @@ impl ForYouFeedServer {
             });
         }
 
+        if self.pipeline.discovery_client.is_some()
+            && query.user_id != 0
+            && query.request_id != 0
+            && !query.in_network_only
+            && !query.is_topic_request()
+            && !query.is_shadow_traffic
+            && !query.is_preview
+            && !query.is_under_the_hood_request
+            && !query.is_polling
+        {
+            query.discovery_slate = Some(Arc::new(DiscoverySlate::default()));
+        }
         let (result, trace) = self.pipeline.execute_traced(query).await;
         feed_log::log_feed_response(&result);
+
+        if let Some(client) = &self.pipeline.discovery_client
+            && let Some(slate) = &result.query.discovery_slate
+            && let Some(reserved) = slate.selected.get()
+        {
+            let post_ids: HashSet<_> = result
+                .selected_candidates
+                .iter()
+                .filter_map(|item| match &item.item {
+                    Some(feed_item::Item::Post(post)) => Some(post.tweet_id),
+                    _ => None,
+                })
+                .collect();
+            let offers: Vec<_> = reserved
+                .iter()
+                .copied()
+                .filter(|post| post_ids.contains(&post.post_id))
+                .take(post_ids.len() / SLOTS_PER_DISCOVERY)
+                .collect();
+            if !offers.is_empty() {
+                match client
+                    .offer(result.query.user_id, result.query.request_id, post_ids.len(), &offers)
+                    .await
+                {
+                    Ok(accepted) if accepted.len() != offers.len() => {
+                        tracing::debug!("Some discovery offers became unavailable during blending");
+                    }
+                    Err(error) => tracing::warn!(%error, "Failed to register discovery offers"),
+                    _ => {}
+                }
+            }
+        }
 
         Ok(ForYouFeedOutput {
             pipeline_trace: trace

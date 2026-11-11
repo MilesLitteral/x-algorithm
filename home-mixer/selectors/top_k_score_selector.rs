@@ -12,9 +12,25 @@ impl Selector<ScoredPostsQuery, PostCandidate> for TopKScoreSelector {
         query: &ScoredPostsQuery,
         candidates: Vec<PostCandidate>,
     ) -> SelectResult<PostCandidate> {
-        let mut selected = self.sort(candidates);
+        let (discovery, organic): (Vec<_>, Vec<_>) = candidates
+            .into_iter()
+            .partition(|post| post.discovery_only);
+        let mut selected = self.sort(organic);
         let mut non_selected =
             selected.split_off(params::TOP_K_CANDIDATES_TO_SELECT.min(selected.len()));
+        selected.extend(discovery);
+        if let Some(plans) = query.discovery_slate.as_ref().and_then(|slate| slate.plans.get()) {
+            // Give duplicate organic candidates below the ordinary cutoff a
+            // visibility check without adding them to the ordinary inventory.
+            for mut post in std::mem::take(&mut non_selected) {
+                if plans.contains_key(&post.tweet_id) {
+                    post.discovery_only = true;
+                    selected.push(post);
+                } else {
+                    non_selected.push(post);
+                }
+            }
+        }
         if video_carousel::is_enabled(query) {
             selected.extend(video_carousel::take_videos_by_carousel_score(
                 &mut non_selected,

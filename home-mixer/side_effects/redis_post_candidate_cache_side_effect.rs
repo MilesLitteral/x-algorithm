@@ -43,7 +43,7 @@ impl RedisPostCandidateCacheSideEffect {
 #[async_trait]
 impl SideEffect<ScoredPostsQuery, PostCandidate> for RedisPostCandidateCacheSideEffect {
     fn enable(&self, query: Arc<ScoredPostsQuery>) -> bool {
-        is_prod() && !query.has_cached_posts
+        is_prod() && !query.has_cached_posts && query.discovery_slate.is_none()
     }
 
     async fn side_effect(

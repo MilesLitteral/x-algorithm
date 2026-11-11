@@ -27,6 +27,9 @@ impl Filter<ScoredPostsQuery, PostCandidate> for FairShareRankingFilter {
         candidates: Vec<PostCandidate>,
     ) -> FilterResult<PostCandidate> {
         let budget = query.params.get(PhoenixScoresResultSize) as usize;
+        let (discovery, candidates): (Vec<_>, Vec<_>) = candidates
+            .into_iter()
+            .partition(|post| post.discovery_only);
         let selected = selection_mask(&candidates, budget);
         let mut kept = Vec::new();
         let mut removed = Vec::new();
@@ -37,6 +40,7 @@ impl Filter<ScoredPostsQuery, PostCandidate> for FairShareRankingFilter {
                 removed.push(candidate);
             }
         }
+        kept.extend(discovery);
         FilterResult { kept, removed }
     }
 }

@@ -3,6 +3,7 @@ pub mod conversation_grouping;
 pub mod country_codes;
 pub mod egress;
 pub mod feed_log;
+pub mod guaranteed_discovery;
 pub mod phoenix_request;
 pub mod popular_authors;
 pub mod popular_posts;

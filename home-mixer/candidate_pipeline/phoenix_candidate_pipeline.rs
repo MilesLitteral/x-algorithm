@@ -73,6 +73,7 @@ use crate::filters::dedup_conversation_filter::DedupConversationFilter;
 use crate::filters::drop_duplicates_filter::DropDuplicatesFilter;
 use crate::filters::fair_share_ranking_filter::FairShareRankingFilter;
 use crate::filters::fav_holdout_filter::FavHoldoutFilter;
+use crate::filters::guaranteed_discovery_slots::GuaranteedDiscoverySlots;
 use crate::filters::ineligible_subscription_filter::IneligibleSubscriptionFilter;
 use crate::filters::inventory_holdout_filter::InventoryHoldoutFilter;
 use crate::filters::new_user_min_engagement_filter::NewUserMinEngagementFilter;
@@ -133,6 +134,7 @@ use crate::side_effects::retrieval_candidates_kafka_side_effect::RetrievalCandid
 use crate::side_effects::scored_stats_side_effect::ScoredStatsSideEffect;
 use crate::side_effects::serendipity_stats_side_effect::SerendipityStatsSideEffect;
 use crate::sources::cached_posts_source::CachedPostsSource;
+use crate::sources::guaranteed_discovery_source::GuaranteedDiscoverySource;
 use crate::sources::phoenix_moe_source::PhoenixMOESource;
 use crate::sources::phoenix_source::PhoenixSource;
 use crate::sources::phoenix_topics_source::PhoenixTopicsSource;
@@ -141,6 +143,7 @@ use crate::sources::sid_source::SidSource;
 use crate::sources::simclusters_source::SimclustersSource;
 use crate::sources::thunder_source::ThunderSource;
 use crate::sources::tweet_mixer_source::TweetMixerSource;
+use crate::util::guaranteed_discovery::DiscoveryClient;
 use crate::util::popular_authors::{
     InMemoryPopularAuthorsStore, PopularAuthorsCache, PopularAuthorsStore,
 };
@@ -228,6 +231,7 @@ pub struct PhoenixCandidatePipeline {
     filters: Vec<Box<dyn Filter<ScoredPostsQuery, PostCandidate>>>,
     scorers: Vec<Box<dyn Scorer<ScoredPostsQuery, PostCandidate>>>,
     selector: TopKScoreSelector,
+    pub(crate) discovery_client: Option<Arc<DiscoveryClient>>,
     post_selection_hydrators: Vec<Box<dyn Hydrator<ScoredPostsQuery, PostCandidate>>>,
     post_selection_filters: Vec<Box<dyn Filter<ScoredPostsQuery, PostCandidate>>>,
     side_effects: Arc<Vec<Box<dyn SideEffect<ScoredPostsQuery, PostCandidate>>>>,
@@ -377,7 +381,7 @@ impl PhoenixCandidatePipeline {
             core_data_hydrator.clone(),
         ));
         let cached_posts_source = Box::new(CachedPostsSource);
-        let sources: Vec<Box<dyn Source<ScoredPostsQuery, PostCandidate>>> = vec![
+        let mut sources: Vec<Box<dyn Source<ScoredPostsQuery, PostCandidate>>> = vec![
             thunder_source,
             popular_posts_source,
             tweet_mixer_source,
@@ -388,6 +392,14 @@ impl PhoenixCandidatePipeline {
             sid_source,
             cached_posts_source,
         ];
+        let discovery_client = DiscoveryClient::from_env().map(Arc::new);
+        if let Some(client) = &discovery_client {
+            // Ordinary sources precede discovery so duplicate posts retain their
+            // normal hydration metadata and can still compete in ordinary ranking.
+            sources.push(Box::new(GuaranteedDiscoverySource {
+                client: Arc::clone(client),
+            }));
+        }
 
         let hydrators: Vec<Box<dyn Hydrator<ScoredPostsQuery, PostCandidate>>> = vec![
             Box::new(InNetworkCandidateHydrator),
@@ -513,6 +525,7 @@ impl PhoenixCandidatePipeline {
             Box::new(AncillaryVFFilter),
             Box::new(AncestorVideoFilter),
             Box::new(DedupConversationFilter),
+            Box::new(GuaranteedDiscoverySlots),
             Box::new(VideoCarouselFilter),
         ];
 
@@ -549,6 +562,7 @@ impl PhoenixCandidatePipeline {
             sources,
             scorers,
             selector,
+            discovery_client,
             post_selection_hydrators,
             post_selection_filters,
             side_effects,

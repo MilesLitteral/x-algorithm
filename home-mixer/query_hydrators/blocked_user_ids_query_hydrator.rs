@@ -29,5 +29,11 @@ impl QueryHydrator<ScoredPostsQuery> for BlockedUserIdsQueryHydrator {
 
     fn update(&self, query: &mut ScoredPostsQuery, hydrated: ScoredPostsQuery) {
         query.user_features.blocked_user_ids = hydrated.user_features.blocked_user_ids;
+        if let Some(slate) = &query.discovery_slate {
+            slate.graph_checks.fetch_or(
+                crate::util::guaranteed_discovery::BLOCKS_CHECKED,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
     }
 }

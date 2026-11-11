@@ -18,7 +18,7 @@ pub struct CachedPostsQueryHydrator {
 #[async_trait]
 impl QueryHydrator<ScoredPostsQuery> for CachedPostsQueryHydrator {
     fn enable(&self, query: &ScoredPostsQuery) -> bool {
-        query.params.get(EnableCachedPosts)
+        query.discovery_slate.is_none() && query.params.get(EnableCachedPosts)
     }
 
     async fn hydrate(&self, query: &ScoredPostsQuery) -> Result<ScoredPostsQuery, String> {

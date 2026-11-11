@@ -14,6 +14,10 @@ use xai_visibility_filtering::models as vf;
 pub struct PostCandidate {
     pub tweet_id: u64,
     pub author_id: u64,
+    #[serde(skip)]
+    pub discovery_only: bool,
+    #[serde(skip)]
+    pub discovery_unverified: bool,
     pub tweet_text: String,
     pub in_reply_to_tweet_id: Option<u64>,
     pub retweeted_tweet_id: Option<u64>,

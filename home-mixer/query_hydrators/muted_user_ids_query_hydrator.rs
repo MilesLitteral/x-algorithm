@@ -29,5 +29,11 @@ impl QueryHydrator<ScoredPostsQuery> for MutedUserIdsQueryHydrator {
 
     fn update(&self, query: &mut ScoredPostsQuery, hydrated: ScoredPostsQuery) {
         query.user_features.muted_user_ids = hydrated.user_features.muted_user_ids;
+        if let Some(slate) = &query.discovery_slate {
+            slate.graph_checks.fetch_or(
+                crate::util::guaranteed_discovery::MUTES_CHECKED,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
     }
 }

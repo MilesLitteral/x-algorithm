@@ -508,3 +508,7 @@ The `candidate-pipeline` crate provides a flexible framework for building recomm
 ## License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+
+## Fork experiment
+
+[Guaranteed Discovery](experiments/guaranteed-discovery/README.md) adds a reserved For You discovery lane, a local impression ledger, and a reproducible control comparison.

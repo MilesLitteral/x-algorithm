@@ -64,6 +64,7 @@ pub struct ForYouCandidatePipeline {
     sources: Vec<Box<dyn Source<ScoredPostsQuery, FeedItem>>>,
     filters: Vec<Box<dyn Filter<ScoredPostsQuery, FeedItem>>>,
     selector: BlenderSelector,
+    pub(crate) discovery_client: Option<Arc<crate::util::guaranteed_discovery::DiscoveryClient>>,
     post_selection_filters: Vec<Box<dyn Filter<ScoredPostsQuery, FeedItem>>>,
     side_effects: Arc<Vec<Box<dyn SideEffect<ScoredPostsQuery, FeedItem>>>>,
 }
@@ -216,6 +217,10 @@ impl ForYouCandidatePipeline {
             ))),
         ];
 
+        let discovery_client = scored_posts_server
+            .phoenix_candidate_pipeline
+            .discovery_client
+            .clone();
         let sources: Vec<Box<dyn Source<ScoredPostsQuery, FeedItem>>> = vec![
             Box::new(ScoredPostsSource {
                 scored_posts_server,
@@ -267,6 +272,7 @@ impl ForYouCandidatePipeline {
             sources,
             filters,
             selector,
+            discovery_client,
             post_selection_filters,
             side_effects,
         }

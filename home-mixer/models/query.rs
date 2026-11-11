@@ -121,6 +121,8 @@ pub struct ScoredPostsQuery {
     pub is_under_the_hood_request: bool,
     pub is_preview: bool,
     pub is_polling: bool,
+    #[serde(skip)]
+    pub discovery_slate: Option<Arc<crate::util::guaranteed_discovery::DiscoverySlate>>,
     #[serde(serialize_with = "serialize_debug")]
     pub cursor: Option<UrtOrderedCursor>,
     pub request_context: String,
@@ -249,6 +251,7 @@ impl ScoredPostsQuery {
             is_under_the_hood_request: false,
             is_preview,
             is_polling: false,
+            discovery_slate: None,
             cursor: None,
             request_context: String::new(),
             served_history: vec![],

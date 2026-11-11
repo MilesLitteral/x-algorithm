@@ -139,6 +139,10 @@ impl CachedHydrator<ScoredPostsQuery, PostCandidate> for CoreDataCandidateHydrat
     }
 
     fn update(&self, candidate: &mut PostCandidate, hydrated: PostCandidate) {
+        if candidate.discovery_only {
+            candidate.discovery_unverified =
+                hydrated.author_id == 0 || candidate.author_id != hydrated.author_id;
+        }
         if candidate.author_id == 0 && hydrated.author_id != 0 {
             candidate.author_id = hydrated.author_id;
         }

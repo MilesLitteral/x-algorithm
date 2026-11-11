@@ -55,7 +55,16 @@ impl Filter<ScoredPostsQuery, PostCandidate> for NewUserMinEngagementFilter {
         let threshold = query.params.get(NewUserMinEngagementThreshold);
         let (kept, removed): (Vec<_>, Vec<_>) = candidates
             .into_iter()
-            .partition(|c| should_keep(c, metric, use_ratio, threshold));
+            .map(|mut candidate| {
+                if !should_keep(&candidate, metric, use_ratio, threshold)
+                    && query.discovery_slate.as_ref().and_then(|slate| slate.plans.get())
+                        .is_some_and(|plans| plans.contains_key(&candidate.tweet_id))
+                {
+                    candidate.discovery_only = true;
+                }
+                candidate
+            })
+            .partition(|c| c.discovery_only || should_keep(c, metric, use_ratio, threshold));
 
         FilterResult { kept, removed }
     }
